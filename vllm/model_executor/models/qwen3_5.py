@@ -66,6 +66,7 @@ from .interfaces import (
     MultiModalEmbeddings,
     SupportsEagle3,
     SupportsLoRA,
+    SupportsMRoPE,
     SupportsPP,
     _require_is_multimodal,
 )
@@ -283,6 +284,8 @@ class Qwen3_5ForCausalLMBase(
     SupportsEagle3,
     SupportsLoRA,
     SupportsPP,
+    IsHybrid,
+    SupportsMRoPE,
 ):
     packed_modules_mapping = {
         "qkv_proj": [
@@ -371,6 +374,61 @@ class Qwen3_5ForCausalLMBase(
             skip_prefixes=["mtp."],
         )
         return loader.load_weights(weights)
+
+    @classmethod
+    def get_mamba_state_dtype_from_config(
+        cls,
+        vllm_config: "VllmConfig",
+    ) -> tuple[torch.dtype, torch.dtype]:
+        return MambaStateDtypeCalculator.gated_delta_net_state_dtype(
+            vllm_config.model_config.dtype,
+            vllm_config.cache_config.mamba_cache_dtype,
+            vllm_config.cache_config.mamba_ssm_cache_dtype,
+        )
+
+    @classmethod
+    def get_mamba_state_shape_from_config(
+        cls, vllm_config: "VllmConfig"
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        parallel_config = vllm_config.parallel_config
+        hf_config = vllm_config.model_config.hf_text_config
+        tp_size = parallel_config.tensor_parallel_size
+        num_spec = (
+            vllm_config.speculative_config.num_speculative_tokens
+            if vllm_config.speculative_config
+            else 0
+        )
+        return MambaStateShapeCalculator.gated_delta_net_state_shape(
+            tp_size,
+            hf_config.linear_num_key_heads,
+            hf_config.linear_num_value_heads,
+            hf_config.linear_key_head_dim,
+            hf_config.linear_value_head_dim,
+            hf_config.linear_conv_kernel_dim,
+            num_spec,
+        )
+
+    @classmethod
+    def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc, MambaStateCopyFunc]:
+        return MambaStateCopyFuncCalculator.gated_delta_net_state_copy_func()
+
+    def get_mrope_input_positions(
+        self,
+        input_tokens: list[int],
+        mm_features: list,
+    ) -> tuple[torch.Tensor, int]:
+        # Text-only checkpoint: with no multimodal features this reduces to
+        # standard interleaved M-RoPE over text positions. Reuse the shared
+        # Qwen3-VL implementation to stay consistent with the multimodal class.
+        # Use the top-level hf_config (not hf_text_config): it carries the
+        # image/video/vision token ids and a promoted vision_config object that
+        # the helper reads (spatial_merge_size). The text sub-config has neither.
+        mrope_config = self.model_config.hf_config
+        return Qwen3VLForConditionalGeneration._get_mrope_input_positions(
+            input_tokens=input_tokens,
+            mm_features=mm_features,
+            config=mrope_config,
+        )
 
 
 class Qwen3_5ForCausalLM(Qwen3_5ForCausalLMBase):
