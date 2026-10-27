@@ -1,0 +1,35 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 26,
+        "patch": 1
+    },
+    "configurePresets": [
+        {
+            "name": "release",
+            "binaryDir": "${sourceDir}/cmake-build-release",
+            "cacheVariables": {
+                "CMAKE_CUDA_COMPILER": "/usr/local/cuda/bin/nvcc",
+                "CMAKE_BUILD_TYPE": "Release",
+                "VLLM_PYTHON_EXECUTABLE": "/home/leo/src/vllm/.venv/bin/python",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}",
+                "CMAKE_CUDA_FLAGS": "",
+                "NVCC_THREADS": "4",
+                "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_HIP_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_JOB_POOLS": "compile=10"
+            },
+            "generator": "Ninja"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "jobs": 10
+        }
+    ]
+}
